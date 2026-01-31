@@ -1,7 +1,8 @@
 import { useCart } from '../context/CartContext';
 import { useNavigate } from 'react-router-dom';
 import { FiTrash2, FiMinus, FiPlus } from 'react-icons/fi';
-import { API_BASE_URL } from '../services/api';
+// 1. Import BASE_URL (not just API_BASE_URL)
+import { BASE_URL } from '../services/api';
 
 export default function Cart() {
   const { cart, addToCart, removeFromCart, getCartTotal } = useCart();
@@ -25,10 +26,11 @@ export default function Cart() {
         {cart.map(item => (
           <div key={item._id} className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex gap-4 relative">
             
-            {/* Image (Yellow Bg style from screenshot) */}
+            {/* Image */}
             <div className="w-24 h-24 bg-yellow-400 rounded-xl flex items-center justify-center flex-shrink-0">
                <img 
-                 src={`${API_BASE_URL}${item.images[0]}`} 
+                 // 2. USE BASE_URL HERE (Removes the /api prefix)
+                 src={`${BASE_URL}${item.images[0]}`} 
                  alt={item.name} 
                  className="w-20 h-20 object-contain drop-shadow-md"
                />
@@ -61,7 +63,7 @@ export default function Cart() {
               </div>
             </div>
 
-            {/* Trash Icon (Top Right) */}
+            {/* Trash Icon */}
             <button 
               onClick={() => removeFromCart(item._id)}
               className="absolute top-3 right-3 text-red-500 bg-red-50 p-2 rounded-lg"
