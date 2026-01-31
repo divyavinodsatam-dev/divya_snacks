@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const Otp = require('../models/Otp');
 const Order = require('../models/Order');
 const Snack = require('../models/Snack');
@@ -7,17 +8,49 @@ const Snack = require('../models/Snack');
 // 1. Send OTP
 router.post('/otp/send', async (req, res) => {
     const { phone } = req.body;
-    const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString(); // 4 Digit
+    const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString(); 
 
-    // Upsert OTP (Update if exists, else insert)
+    // Save to DB
     await Otp.findOneAndUpdate(
         { phone },
         { otp: generatedOtp, createdAt: Date.now() },
         { upsert: true, new: true }
     );
 
-    console.log(`>>> MOCK SMS: OTP for ${phone} is ${generatedOtp} <<<`);
-    res.json({ message: 'OTP Sent' });
+    // --- TEXTBEE SENDING LOGIC ---
+    try {
+        const apiKey = process.env.TEXTBEE_API_KEY;
+        const deviceId = process.env.TEXTBEE_DEVICE_ID;
+
+        // TextBee requires country code (E.164 format). 
+        // If your frontend sends 10 digits (9876543210), prepending +91 is safe for India.
+        const formattedPhone = phone.length === 10 ? `+91${phone}` : phone;
+
+        // Send Request to TextBee
+        await axios.post(
+            `https://api.textbee.dev/api/v1/gateway/devices/${deviceId}/send-sms`, 
+            {
+                recipients: [formattedPhone], // Must be an array
+                message: `Your Divyam Snacks verification code is ${generatedOtp}. Valid for 5 mins.`
+            }, 
+            {
+                headers: {
+                    'x-api-key': apiKey
+                }
+            }
+        );
+
+        console.log(`✅ SMS Sent via TextBee to ${formattedPhone}`);
+        res.json({ message: 'OTP Sent via SMS' });
+
+    } catch (error) {
+        console.error("❌ TextBee Failed:", error.response?.data || error.message);
+        
+        // Fallback: If SMS fails (e.g., phone offline), log it so you can still test locally
+        console.log(`>>> FALLBACK MOCK OTP: ${generatedOtp} <<<`);
+        // We still send success to frontend so the UI doesn't break
+        res.json({ message: 'OTP Sent (Fallback)' });
+    }
 });
 
 // 2. Verify & Place Order

@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+body {
+  background-color: #FAFAFA;
+  color: #333;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Hide scrollbar for category list */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
