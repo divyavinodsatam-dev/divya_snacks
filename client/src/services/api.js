@@ -56,7 +56,6 @@ export const deleteCategory = async (id) => {
 // --- ORDERS (ADMIN) ---
 export const fetchOrders = async () => {
     try {
-        // ✅ FIX: Updated path from '/orders' to '/orders/admin/all'
         const res = await axios.get(`${API_BASE_URL}/orders/admin/all`);
         return res.data;
     } catch (error) {
@@ -68,6 +67,11 @@ export const fetchOrders = async () => {
 export const updateOrderStatus = async (id, status) => {
     const res = await axios.put(`${API_BASE_URL}/orders/${id}/status`, { status });
     return res.data;
+};
+
+// ✅ ADD THIS FUNCTION
+export const deleteOrder = async (id) => {
+    await axios.delete(`${API_BASE_URL}/orders/${id}`);
 };
 
 // --- CHECKOUT & OTP ---

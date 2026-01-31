@@ -1,63 +1,48 @@
 const express = require('express');
 const router = express.Router();
-const axios = require('axios');
+const axios = require('axios'); // Required for TextBee
 const Otp = require('../models/Otp');
 const Order = require('../models/Order');
 const Snack = require('../models/Snack');
 
-// 1. Send OTP
+// 1. Send OTP (User Side)
 router.post('/otp/send', async (req, res) => {
     const { phone } = req.body;
     const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString(); 
 
-    // Save to DB
+    // Upsert OTP
     await Otp.findOneAndUpdate(
         { phone },
         { otp: generatedOtp, createdAt: Date.now() },
         { upsert: true, new: true }
     );
 
-    // --- TEXTBEE SENDING LOGIC ---
+    // TextBee SMS
     try {
         const apiKey = process.env.TEXTBEE_API_KEY;
         const deviceId = process.env.TEXTBEE_DEVICE_ID;
-
-        // TextBee requires country code (E.164 format). 
-        // If your frontend sends 10 digits (9876543210), prepending +91 is safe for India.
         const formattedPhone = phone.length === 10 ? `+91${phone}` : phone;
 
-        // Send Request to TextBee
         await axios.post(
             `https://api.textbee.dev/api/v1/gateway/devices/${deviceId}/send-sms`, 
             {
-                recipients: [formattedPhone], // Must be an array
+                recipients: [formattedPhone],
                 message: `Your Divyam Snacks verification code is ${generatedOtp}. Valid for 5 mins.`
             }, 
-            {
-                headers: {
-                    'x-api-key': apiKey
-                }
-            }
+            { headers: { 'x-api-key': apiKey } }
         );
-
-        console.log(`✅ SMS Sent via TextBee to ${formattedPhone}`);
         res.json({ message: 'OTP Sent via SMS' });
-
     } catch (error) {
-        console.error("❌ TextBee Failed:", error.response?.data || error.message);
-        
-        // Fallback: If SMS fails (e.g., phone offline), log it so you can still test locally
+        console.error("❌ TextBee OTP Failed:", error.message);
         console.log(`>>> FALLBACK MOCK OTP: ${generatedOtp} <<<`);
-        // We still send success to frontend so the UI doesn't break
         res.json({ message: 'OTP Sent (Fallback)' });
     }
 });
 
-// 2. Verify & Place Order
+// 2. Verify & Place Order (User Side)
 router.post('/place', async (req, res) => {
     const { customerName, customerPhone, otp, items } = req.body;
 
-    // Verify OTP
     const validOtp = await Otp.findOne({ phone: customerPhone, otp });
     if (!validOtp) return res.status(400).json({ error: "Invalid OTP" });
 
@@ -65,11 +50,9 @@ router.post('/place', async (req, res) => {
         let totalAmount = 0;
         const orderItems = [];
 
-        // Validate Prices Backend-side
         for (const item of items) {
             const snack = await Snack.findById(item.snackId);
             if (!snack) continue;
-            
             const itemTotal = snack.price * item.quantity;
             totalAmount += itemTotal;
             orderItems.push({
@@ -88,7 +71,7 @@ router.post('/place', async (req, res) => {
         });
 
         await newOrder.save();
-        await Otp.deleteOne({ _id: validOtp._id }); // Clear OTP
+        await Otp.deleteOne({ _id: validOtp._id });
 
         res.status(201).json({ message: "Order Confirmed!", orderId: newOrder._id });
     } catch (err) {
@@ -96,11 +79,9 @@ router.post('/place', async (req, res) => {
     }
 });
 
-
-// GET all orders (Admin only)
+// 3. GET all orders (Admin)
 router.get('/admin/all', async (req, res) => {
     try {
-        // Sort by Created Date (Newest first)
         const orders = await Order.find().sort({ createdAt: -1 });
         res.json(orders);
     } catch (err) {
@@ -108,22 +89,60 @@ router.get('/admin/all', async (req, res) => {
     }
 });
 
-// UPDATE Order Status (Confirm Order)
+// 4. UPDATE Status & Send SMS (Admin)
 router.put('/:id/status', async (req, res) => {
-    const { status } = req.body; // e.g., 'Confirmed'
+    const { status } = req.body; // 'Confirmed' or 'Rejected'
+    
     try {
         const order = await Order.findByIdAndUpdate(
             req.params.id, 
             { status: status }, 
             { new: true }
         );
+
+        if (!order) return res.status(404).json({ message: "Order not found" });
         
-        // MOCK SMS NOTIFICATION
-        console.log(`>>> SMS SENT TO ${order.customerPhone}: Your order #${order._id} is ${status}! <<<`);
+        // --- SEND SMS NOTIFICATION ---
+        try {
+            const apiKey = process.env.TEXTBEE_API_KEY;
+            const deviceId = process.env.TEXTBEE_DEVICE_ID;
+            const phone = order.customerPhone.length === 10 ? `+91${order.customerPhone}` : order.customerPhone;
+            
+            let message = "";
+            if (status === 'Confirmed') {
+                message = `Hi ${order.customerName}, your Order #${order._id.toString().slice(-4)} is CONFIRMED! We are preparing it now.`;
+            } else if (status === 'Rejected') {
+                message = `Hi ${order.customerName}, sorry, your Order #${order._id.toString().slice(-4)} was REJECTED. Please contact the store.`;
+            }
+
+            if (message) {
+                await axios.post(
+                    `https://api.textbee.dev/api/v1/gateway/devices/${deviceId}/send-sms`, 
+                    {
+                        recipients: [phone],
+                        message: message
+                    }, 
+                    { headers: { 'x-api-key': apiKey } }
+                );
+                console.log(`✅ Status SMS Sent to ${phone}`);
+            }
+        } catch (smsError) {
+            console.error("❌ Failed to send Status SMS:", smsError.message);
+        }
         
         res.json(order);
     } catch (err) {
         res.status(400).json({ message: err.message });
+    }
+});
+
+// 5. DELETE Order (Admin)
+router.delete('/:id', async (req, res) => {
+    try {
+        await Order.findByIdAndDelete(req.params.id);
+        res.json({ message: "Order Deleted" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

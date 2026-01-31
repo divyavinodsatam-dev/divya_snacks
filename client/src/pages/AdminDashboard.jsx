@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { FiArrowLeft, FiTrash2, FiEdit2, FiPlus, FiCheck } from 'react-icons/fi';
+import { FiArrowLeft, FiTrash2, FiEdit2, FiPlus, FiCheck, FiX } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import {
   fetchSnacks, fetchCategories, fetchOrders,
   deleteSnack, addSnackWithImages, updateSnackWithImages,
-  updateOrderStatus, addCategory, deleteCategory, BASE_URL
+  updateOrderStatus, deleteOrder, addCategory, deleteCategory, BASE_URL
 } from '../services/api';
 import EditSnackModal from '../components/Admin/EditSidemodal';
 
@@ -53,7 +53,32 @@ export default function AdminDashboard() {
     }
   };
 
-  // --- ACTIONS ---
+  // --- ORDER ACTIONS ---
+
+  const handleStatusUpdate = async (id, status) => {
+    const toastId = toast.loading(`Updating order...`);
+    try {
+      await updateOrderStatus(id, status);
+      toast.success(`Order ${status} & SMS Sent!`, { id: toastId });
+      loadData(); 
+    } catch (e) {
+      toast.error("Update failed", { id: toastId });
+    }
+  };
+
+  const handleDeleteOrder = async (id) => {
+    if (confirm("Permanently delete this order history?")) {
+      try {
+        await deleteOrder(id);
+        toast.success("Order Deleted");
+        loadData();
+      } catch (e) {
+        toast.error("Failed to delete order");
+      }
+    }
+  };
+
+  // --- MENU ACTIONS ---
 
   const handleToggleAvailability = async (item) => {
     try {
@@ -69,13 +94,13 @@ export default function AdminDashboard() {
       formData.append('price', item.price);
       formData.append('stock', item.stock);
       formData.append('category', item.category);
-      formData.append('isAvailable', !item.isAvailable); // Flip status
+      formData.append('isAvailable', !item.isAvailable);
       
       await updateSnackWithImages(item._id, formData);
       toast.success(item.isAvailable ? "Item Hidden" : "Item Live");
     } catch (e) {
       toast.error("Failed to update status");
-      loadData(); // Revert on error
+      loadData();
     }
   };
 
@@ -119,22 +144,14 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleStatusUpdate = async (id, status) => {
-    await updateOrderStatus(id, status);
-    loadData();
-    toast.success("Order Updated");
-  };
-
-  // --- RENDERERS ---
+  // --- HELPER COMPONENTS ---
 
   const ToggleSwitch = ({ active, onClick }) => (
     <button 
       onClick={onClick} 
       className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${active ? 'bg-blue-500' : 'bg-gray-300'}`}
     >
-      <span
-        className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${active ? 'translate-x-5' : 'translate-x-0'}`}
-      />
+      <span className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${active ? 'translate-x-5' : 'translate-x-0'}`} />
     </button>
   );
 
@@ -149,7 +166,7 @@ export default function AdminDashboard() {
         <h1 className="text-white text-xl font-bold tracking-wide">Dashboard</h1>
       </div>
 
-      {/* 2. TABS (White strip) */}
+      {/* 2. TABS */}
       <div className="bg-white flex shadow-sm sticky top-[72px] z-10">
         {['Orders', 'Menu', 'Categories'].map(tab => (
           <button
@@ -179,33 +196,62 @@ export default function AdminDashboard() {
                   <div className="text-center py-40 text-gray-400 text-lg">No Pending Orders</div>
                 ) : (
                   orders.map(order => (
-                    <div key={order._id} className="bg-white p-4 rounded-lg shadow-sm">
-                      <div className="flex justify-between items-start mb-2">
+                    <div key={order._id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 relative">
+                      
+                      {/* Delete Button (Visible for completed/rejected orders) */}
+                      {order.status !== 'Pending' && (
+                        <button 
+                          onClick={() => handleDeleteOrder(order._id)}
+                          className="absolute top-4 right-4 text-gray-400 hover:text-red-500 p-2 transition-colors"
+                          title="Delete Record"
+                        >
+                          <FiTrash2 size={20} />
+                        </button>
+                      )}
+
+                      <div className="flex justify-between items-start mb-2 pr-10">
                          <h3 className="font-bold text-lg">{order.customerName}</h3>
-                         <span className={`px-2 py-0.5 text-xs rounded font-bold ${order.status === 'Confirmed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                         <span className={`px-3 py-1 text-xs rounded-full font-bold ${
+                           order.status === 'Confirmed' ? 'bg-green-100 text-green-700' : 
+                           order.status === 'Rejected' ? 'bg-red-100 text-red-700' : 
+                           'bg-yellow-100 text-yellow-700'
+                         }`}>
                             {order.status}
                          </span>
                       </div>
+                      
                       <p className="text-gray-500 text-sm mb-3">Phone: {order.customerPhone}</p>
-                      <div className="bg-gray-50 p-3 rounded text-sm space-y-1">
+                      
+                      {/* Items */}
+                      <div className="bg-gray-50 p-3 rounded-lg text-sm space-y-1 mb-4">
                         {order.items.map((i, idx) => (
                            <div key={idx} className="flex justify-between">
                               <span>{i.quantity} x {i.snackName}</span>
                               <span className="font-medium">₹{i.price * i.quantity}</span>
                            </div>
                         ))}
-                        <div className="border-t pt-2 mt-2 flex justify-between font-bold">
+                        <div className="border-t pt-2 mt-2 flex justify-between font-bold text-gray-800">
                            <span>Total</span>
                            <span>₹{order.totalAmount}</span>
                         </div>
                       </div>
+
+                      {/* Action Buttons (Only for Pending) */}
                       {order.status === 'Pending' && (
-                        <button 
-                          onClick={() => handleStatusUpdate(order._id, 'Confirmed')}
-                          className="mt-4 w-full bg-green-500 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-green-600"
-                        >
-                          <FiCheck /> Confirm Order
-                        </button>
+                        <div className="flex gap-3 mt-2">
+                            <button 
+                              onClick={() => handleStatusUpdate(order._id, 'Confirmed')}
+                              className="flex-1 bg-green-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-600 transition-colors shadow-sm"
+                            >
+                              <FiCheck size={20} /> Confirm
+                            </button>
+                            <button 
+                              onClick={() => handleStatusUpdate(order._id, 'Rejected')}
+                              className="flex-1 bg-red-100 text-red-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-200 transition-colors"
+                            >
+                              <FiX size={20} /> Reject
+                            </button>
+                        </div>
                       )}
                     </div>
                   ))
@@ -218,22 +264,16 @@ export default function AdminDashboard() {
               <div className="space-y-4 pb-16">
                 {snacks.map(item => (
                   <div key={item._id} className="bg-white p-3 rounded-xl shadow-sm flex items-center gap-4">
-                    
-                    {/* Thumbnail */}
                     <img 
                       src={`${BASE_URL}${item.images[0]}`} 
                       alt={item.name}
                       className="w-20 h-20 object-cover rounded-lg bg-gray-100" 
                     />
-
-                    {/* Details */}
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-gray-900 text-lg">{item.name}</h3>
                       <p className="text-gray-500 text-sm">Stock: {item.stock}</p>
                       <p className="text-green-600 font-bold mt-1">₹{item.price}</p>
                     </div>
-
-                    {/* Controls */}
                     <div className="flex flex-col items-end gap-3">
                       <div className="flex flex-col items-end">
                         <span className="text-[10px] text-gray-400 mb-1">
@@ -241,7 +281,6 @@ export default function AdminDashboard() {
                         </span>
                         <ToggleSwitch active={item.isAvailable} onClick={() => handleToggleAvailability(item)} />
                       </div>
-                      
                       <div className="flex gap-4 pr-1">
                         <button onClick={() => { setEditingSnack(item); setIsModalOpen(true); }} className="text-blue-600 hover:text-blue-800">
                            <FiEdit2 size={20} />
@@ -259,7 +298,6 @@ export default function AdminDashboard() {
             {/* --- CATEGORIES TAB --- */}
             {activeTab === 'Categories' && (
               <div className="space-y-4">
-                {/* Input Card */}
                 <div className="bg-white p-2 rounded-lg shadow-sm flex gap-2">
                   <input 
                     type="text"
@@ -268,15 +306,10 @@ export default function AdminDashboard() {
                     placeholder="New Category Name"
                     className="flex-1 bg-gray-50 rounded-md px-3 py-2 text-sm outline-none border border-transparent focus:border-yellow-400"
                   />
-                  <button 
-                    onClick={handleAddCategory}
-                    className="bg-[#FFD700] text-black font-bold px-4 rounded-md text-sm shadow-sm"
-                  >
+                  <button onClick={handleAddCategory} className="bg-[#FFD700] text-black font-bold px-4 rounded-md text-sm shadow-sm">
                     Add
                   </button>
                 </div>
-
-                {/* List */}
                 <div className="space-y-2">
                    {categories.map(cat => (
                      <div key={cat._id} className="bg-white p-4 rounded-lg shadow-sm flex justify-between items-center">
@@ -293,7 +326,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* FLOATING ADD BUTTON (Only on Menu Tab) */}
+      {/* Floating Add Button (Menu Only) */}
       {activeTab === 'Menu' && (
         <button 
           onClick={() => { setEditingSnack(null); setIsModalOpen(true); }}
@@ -303,7 +336,7 @@ export default function AdminDashboard() {
         </button>
       )}
 
-      {/* Edit Modal Component */}
+      {/* Edit Modal */}
       <EditSnackModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)}

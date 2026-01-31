@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { FiX, FiUpload } from 'react-icons/fi';
+import { FiX, FiUpload, FiImage } from 'react-icons/fi';
+import { BASE_URL } from '../../services/api'; // Import BASE_URL to show existing images
 import toast from 'react-hot-toast';
 
 export default function EditSnackModal({ isOpen, onClose, snack, onSave, categories }) {
@@ -9,10 +10,10 @@ export default function EditSnackModal({ isOpen, onClose, snack, onSave, categor
     stock: '',
     description: '',
     category: '',
-    images: []
+    images: [] // New files to upload
   });
 
-  // Load data when editing
+  // Load existing data
   useEffect(() => {
     if (snack) {
       setFormData({
@@ -21,10 +22,9 @@ export default function EditSnackModal({ isOpen, onClose, snack, onSave, categor
         stock: snack.stock || '',
         description: snack.description || '',
         category: snack.category || '',
-        images: [] // Keep empty, we handle new files separately
+        images: [] 
       });
     } else {
-      // Reset for "Add New"
       setFormData({ name: '', price: '', stock: '', description: '', category: '', images: [] });
     }
   }, [snack, isOpen]);
@@ -34,32 +34,33 @@ export default function EditSnackModal({ isOpen, onClose, snack, onSave, categor
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // ✅ Handle Multiple File Selection
   const handleFileChange = (e) => {
     if (e.target.files) {
-      setFormData(prev => ({ ...prev, images: Array.from(e.target.files) }));
+      const files = Array.from(e.target.files); // Convert to Array
+      if (files.length > 5) {
+        toast.error("Max 5 images allowed");
+        return;
+      }
+      setFormData(prev => ({ ...prev, images: files }));
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.price || !formData.category) {
-      return toast.error("Please fill required fields");
-    }
     
-    // Prepare FormData for file upload
     const data = new FormData();
     data.append('name', formData.name);
     data.append('price', formData.price);
+    data.append('category', formData.category);
     data.append('stock', formData.stock);
     data.append('description', formData.description);
-    data.append('category', formData.category);
-    
-    // Append images
+
+    // ✅ Append each file with the SAME key 'images'
     formData.images.forEach((file) => {
       data.append('images', file);
     });
     
-    // If editing, send the ID too (handled in parent)
     onSave(data, snack?._id);
   };
 
@@ -74,58 +75,81 @@ export default function EditSnackModal({ isOpen, onClose, snack, onSave, categor
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Name */}
+          
+          {/* Inputs */}
           <div>
-            <label className="block text-sm font-bold mb-1">Name *</label>
-            <input name="name" value={formData.name} onChange={handleChange} className="w-full border p-2 rounded-lg" placeholder="e.g. Laddu" required />
+            <label className="block text-sm font-bold mb-1">Name</label>
+            <input name="name" value={formData.name} onChange={handleChange} className="w-full border p-3 rounded-xl" required />
           </div>
-
           <div className="grid grid-cols-2 gap-4">
-            {/* Price */}
             <div>
-              <label className="block text-sm font-bold mb-1">Price (₹) *</label>
-              <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-full border p-2 rounded-lg" required />
+                <label className="block text-sm font-bold mb-1">Price</label>
+                <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-full border p-3 rounded-xl" required />
             </div>
-            {/* Stock */}
             <div>
-              <label className="block text-sm font-bold mb-1">Stock</label>
-              <input type="number" name="stock" value={formData.stock} onChange={handleChange} className="w-full border p-2 rounded-lg" placeholder="0" />
+                <label className="block text-sm font-bold mb-1">Stock</label>
+                <input type="number" name="stock" value={formData.stock} onChange={handleChange} className="w-full border p-3 rounded-xl" />
             </div>
           </div>
-
-          {/* Category */}
           <div>
-            <label className="block text-sm font-bold mb-1">Category *</label>
-            <select name="category" value={formData.category} onChange={handleChange} className="w-full border p-2 rounded-lg bg-white" required>
+            <label className="block text-sm font-bold mb-1">Category</label>
+            <select name="category" value={formData.category} onChange={handleChange} className="w-full border p-3 rounded-xl" required>
               <option value="">Select Category</option>
-              {categories.map(cat => (
-                <option key={cat._id} value={cat.name}>{cat.name}</option>
-              ))}
+              {categories.map(cat => <option key={cat._id} value={cat.name}>{cat.name}</option>)}
             </select>
           </div>
-
-          {/* Description */}
           <div>
             <label className="block text-sm font-bold mb-1">Description</label>
-            <textarea name="description" value={formData.description} onChange={handleChange} rows="3" className="w-full border p-2 rounded-lg" placeholder="Ingredients, taste, weight..." />
+            <textarea name="description" value={formData.description} onChange={handleChange} className="w-full border p-3 rounded-xl" />
           </div>
 
-          {/* Image Upload */}
-          <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition-colors">
-            <input type="file" multiple accept="image/*" onChange={handleFileChange} className="hidden" id="file-upload" />
-            <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center gap-2">
-              <FiUpload size={24} className="text-gray-400" />
-              <span className="text-sm text-gray-600">
-                {formData.images.length > 0 ? `${formData.images.length} files selected` : "Click to upload images"}
-              </span>
-            </label>
+          {/* --- IMAGE SECTION --- */}
+          <div>
+             <label className="block text-sm font-bold mb-2">Images</label>
+             
+             {/* 1. Show Existing Images (if any) */}
+             {snack && snack.images && snack.images.length > 0 && formData.images.length === 0 && (
+                <div className="mb-3 flex gap-2 overflow-x-auto pb-2">
+                    {snack.images.map((img, idx) => (
+                        <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border">
+                            <img src={`${BASE_URL}${img}`} className="w-full h-full object-cover" alt="existing" />
+                        </div>
+                    ))}
+                </div>
+             )}
+
+             {/* 2. Upload Box */}
+             <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition-colors cursor-pointer relative">
+                <input 
+                  type="file" 
+                  multiple // ✅ Allows selecting multiple
+                  accept="image/*" 
+                  onChange={handleFileChange} 
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                />
+                <div className="flex flex-col items-center gap-2">
+                  <FiUpload size={24} className="text-gray-400" />
+                  <span className="text-sm text-gray-600">
+                    {formData.images.length > 0 
+                      ? `${formData.images.length} New Files Selected` 
+                      : "Click to replace images (Select multiple at once)"}
+                  </span>
+                </div>
+             </div>
+             
+             {/* 3. New Files Preview */}
+             {formData.images.length > 0 && (
+               <div className="mt-2 text-xs text-green-600 font-bold">
+                 Uploading {formData.images.length} new images will replace old ones.
+               </div>
+             )}
           </div>
 
-          <button type="submit" className="w-full bg-primary text-black font-bold py-3 rounded-xl hover:bg-yellow-400 transition-colors mt-4">
+          <button type="submit" className="w-full bg-[#FFD700] text-black font-bold py-3 rounded-xl shadow-md hover:shadow-lg transition-all mt-4">
             Save Item
           </button>
         </form>
       </div>
     </div>
   );
-} 
+}

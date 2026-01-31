@@ -1,104 +1,123 @@
-import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { fetchSnacks } from '../services/api';
+import { useParams, useNavigate } from 'react-router-dom';
+import { FiArrowLeft, FiMinus, FiPlus, FiShoppingCart } from 'react-icons/fi';
+import { fetchSnacks, BASE_URL } from '../services/api';
 import { useCart } from '../context/CartContext';
+import LoadingSpinner from '../components/LoadingSpinner';
 import toast from 'react-hot-toast';
-import { FiArrowLeft, FiMinus, FiPlus } from 'react-icons/fi';
-import { BASE_URL } from '../services/api';
 
 export default function SnackDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
+  
   const [snack, setSnack] = useState(null);
-  const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [qty, setQty] = useState(1);
+  const [activeImgIndex, setActiveImgIndex] = useState(0); // For Image Gallery
 
   useEffect(() => {
-    fetchSnacks().then(data => {
-      setSnack(data.find(s => s._id === id));
-      setLoading(false);
-    });
+    const load = async () => {
+      try {
+        const allSnacks = await fetchSnacks();
+        const found = allSnacks.find(s => s._id === id);
+        setSnack(found);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   }, [id]);
 
-  if (loading) return <div className="text-center py-20">Loading...</div>;
-  if (!snack) return <div className="text-center py-20">Item not found</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center"><LoadingSpinner /></div>;
+  if (!snack) return <div className="text-center p-10">Item not found</div>;
+
+  // Handles images safely
+  const images = snack.images && snack.images.length > 0 ? snack.images : [];
+  const activeImage = images.length > 0 ? `${BASE_URL}${images[activeImgIndex]}` : 'https://placehold.co/400?text=No+Image';
 
   const handleAddToCart = () => {
     addToCart(snack, qty);
-    toast.success(`${qty} x ${snack.name} added!`);
-    navigate('/');
+    toast.success(`Added ${qty} ${snack.name} to cart`);
   };
 
-  const isSoldOut = snack.stock === 0;
-
   return (
-    <div className="container mx-auto px-4 py-8">
-      <button onClick={() => navigate(-1)} className="mb-6 flex items-center text-gray-600 hover:text-dark">
-        <FiArrowLeft className="mr-2" /> Back
-      </button>
+    <div className="min-h-screen bg-white pb-24">
+      
+      {/* 1. Header with Back Button */}
+      <div className="absolute top-0 left-0 w-full p-4 z-10 flex justify-between items-center">
+        <button onClick={() => navigate(-1)} className="bg-white/80 p-3 rounded-full shadow-sm backdrop-blur-md text-black">
+          <FiArrowLeft size={24} />
+        </button>
+      </div>
 
-      <div className="grid md:grid-cols-2 gap-10 items-start">
-        {/* Image */}
-        <div className="bg-white rounded-3xl p-8 shadow-sm flex items-center justify-center">
-          <img 
-            src={`${BASE_URL}${snack.images[0]}`} 
-            alt={snack.name} 
-            className="w-full max-h-[400px] object-contain"
-          />
-        </div>
+      {/* 2. Image Gallery Section */}
+      <div className="bg-[#FFF8E1] h-[50vh] relative rounded-b-[50px] flex flex-col items-center justify-center overflow-hidden">
+        
+        {/* Main Active Image */}
+        <img 
+          src={activeImage} 
+          alt={snack.name} 
+          className="w-64 h-64 md:w-80 md:h-80 object-contain drop-shadow-2xl transition-all duration-300"
+        />
 
-        {/* Content */}
-        <div>
-          <span className="text-gray-400 uppercase tracking-wide text-sm font-semibold">{snack.category}</span>
-          <h1 className="text-3xl md:text-5xl font-bold text-dark mt-2 mb-4">{snack.name}</h1>
-          <p className="text-3xl font-bold text-secondary mb-6">₹{snack.price}</p>
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm mb-8">
-            <h3 className="font-bold text-lg mb-2">Description</h3>
-            <p className="text-gray-600 leading-relaxed">
-              {snack.description || "Freshly homemade with love. Perfect for your daily cravings."}
-            </p>
-          </div>
-
-          {/* Controls */}
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-4">
-                <span className={`px-3 py-1 rounded-md text-sm font-bold ${isSoldOut ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                    {isSoldOut ? 'Out of Stock' : `${snack.stock} Available`}
-                </span>
-            </div>
-
-            <div className="flex gap-4 mt-4">
-              {/* Qty Counter */}
-              <div className="flex items-center bg-white border border-gray-200 rounded-full px-4 py-2">
-                <button 
-                  onClick={() => setQty(Math.max(1, qty - 1))}
-                  disabled={isSoldOut}
-                  className="p-2 text-gray-500 hover:text-dark disabled:opacity-30"
-                >
-                  <FiMinus />
-                </button>
-                <span className="w-10 text-center font-bold text-lg">{qty}</span>
-                <button 
-                  onClick={() => setQty(Math.min(snack.stock, qty + 1))}
-                  disabled={isSoldOut}
-                  className="p-2 text-gray-500 hover:text-dark disabled:opacity-30"
-                >
-                  <FiPlus />
-                </button>
-              </div>
-
-              {/* Add Button */}
+        {/* Thumbnail Dots/Images (If more than 1 image) */}
+        {images.length > 1 && (
+          <div className="absolute bottom-6 flex gap-3 z-20 overflow-x-auto px-4 w-full justify-center">
+            {images.map((img, index) => (
               <button 
-                onClick={handleAddToCart}
-                disabled={isSoldOut}
-                className="flex-1 bg-secondary text-white font-bold rounded-full py-4 hover:opacity-90 transition-opacity disabled:bg-gray-300 disabled:cursor-not-allowed shadow-md shadow-red-200"
+                key={index} 
+                onClick={() => setActiveImgIndex(index)}
+                className={`w-14 h-14 rounded-xl border-2 overflow-hidden transition-all ${
+                  activeImgIndex === index ? 'border-orange-500 scale-110' : 'border-transparent opacity-60'
+                }`}
               >
-                {isSoldOut ? 'Sold Out' : `Add to Cart • ₹${snack.price * qty}`}
+                <img src={`${BASE_URL}${img}`} className="w-full h-full object-cover" />
               </button>
-            </div>
+            ))}
           </div>
+        )}
+      </div>
+
+      {/* 3. Details Section */}
+      <div className="p-6 md:p-8">
+        <div className="flex justify-between items-start mb-2">
+          <h1 className="text-3xl font-extrabold text-gray-900">{snack.name}</h1>
+          <span className="text-2xl font-bold text-green-600">₹{snack.price}</span>
+        </div>
+        
+        <p className="text-gray-500 font-medium mb-6">{snack.category}</p>
+
+        <p className="text-gray-600 leading-relaxed mb-8">
+          {snack.description || "A delicious snack made with fresh ingredients. Perfect for your cravings!"}
+        </p>
+
+        {/* Quantity & Add to Cart */}
+        <div className="flex items-center justify-between gap-6">
+          <div className="flex items-center gap-4 bg-gray-100 rounded-full px-4 py-2">
+            <button 
+              onClick={() => setQty(Math.max(1, qty - 1))}
+              className="w-8 h-8 flex items-center justify-center bg-white rounded-full shadow-sm text-black"
+            >
+              <FiMinus />
+            </button>
+            <span className="text-xl font-bold">{qty}</span>
+            <button 
+              onClick={() => setQty(Math.min(snack.stock || 20, qty + 1))}
+              className="w-8 h-8 flex items-center justify-center bg-white rounded-full shadow-sm text-black"
+            >
+              <FiPlus />
+            </button>
+          </div>
+
+          <button 
+            onClick={handleAddToCart}
+            className="flex-1 bg-[#FFD700] text-black font-extrabold py-4 rounded-full shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            Add to Cart <FiShoppingCart />
+          </button>
         </div>
       </div>
     </div>

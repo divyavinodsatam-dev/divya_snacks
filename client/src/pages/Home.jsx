@@ -8,6 +8,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 export default function Home() {
   const [snacks, setSnacks] = useState([]);
   const [categories, setCategories] = useState([]);
+  // 1. Initialize as 'All'
   const [selectedCat, setSelectedCat] = useState('All'); 
   const [loading, setLoading] = useState(true);
 
@@ -16,11 +17,14 @@ export default function Home() {
       try {
         const [sData, cData] = await Promise.all([fetchSnacks(), fetchCategories()]);
         setSnacks(sData);
+        
+        // Add 'All' to categories list
         const cats = [{ _id: 'all', name: 'All' }, ...cData];
         setCategories(cats);
-        // Default to 'Snacks' if available to match design, else All
-        const defaultCat = cats.find(c => c.name === 'Snacks') ? 'Snacks' : 'All';
-        setSelectedCat(defaultCat);
+
+        // 2. FIX: Force selection to 'All' so everything shows by default
+        setSelectedCat('All');
+
       } catch (e) {
         console.error(e);
       } finally {
@@ -30,21 +34,27 @@ export default function Home() {
     load();
   }, []);
 
+  // Filter Logic
   const filtered = snacks.filter(s => 
     String(s.isAvailable) !== 'false' && (selectedCat === 'All' || s.category === selectedCat)
   );
 
-  // --- NEW LOGIC: Split items ---
-  // Top 4 go to Hero Carousel
+  // Split items: Top 4 -> Hero, Rest -> Grid
   const heroItems = filtered.slice(0, 4);
-  // The rest go to Grid
   const gridItems = filtered.slice(4);
 
   if (loading) return <div className="h-screen flex items-center justify-center"><LoadingSpinner /></div>;
 
   return (
     <>
-      <div className="container mx-auto pb-24 md:pb-8 pl-0">
+      <div className="container mx-auto pb-24 md:pb-8 pl-0 pt-4">
+        
+        {/* Title Header */}
+        {/* <div className="pl-16 md:pl-24 mb-6">
+           <h1 className="text-4xl font-extrabold text-dark leading-none">
+             Deliver <br /> to home
+           </h1>
+        </div> */}
 
         <div className="flex">
           {/* --- VERTICAL SIDEBAR (Categories) --- */}
@@ -55,7 +65,7 @@ export default function Home() {
                 <button
                   key={cat._id}
                   onClick={() => setSelectedCat(cat.name)}
-                  className="relative h-24 w-full flex items-center justify-center"
+                  className="relative h-24 w-full flex items-center justify-center group"
                 >
                   {isActive && (
                     <span className="absolute left-4 md:left-8 w-2 h-2 bg-[#FFD700] rounded-full"></span>
@@ -80,7 +90,6 @@ export default function Home() {
               {heroItems.length > 0 ? (
                 <div className="flex gap-4 overflow-x-auto pb-6 scrollbar-hide px-2">
                   {heroItems.map(item => (
-                    // Fixed width wrapper ensures they sit in a row and are scrollable
                     <div key={item._id} className="min-w-[85vw] md:min-w-[400px]">
                       <HeroCard item={item} />
                     </div>

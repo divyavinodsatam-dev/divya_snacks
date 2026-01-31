@@ -1,30 +1,35 @@
 const express = require('express');
 const router = express.Router();
-const Snack = require('../models/Snack');
-const Category = require('../models/Category');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const Snack = require('../models/Snack');
+const Category = require('../models/Category'); 
 
-// --- FILE UPLOAD CONFIGURATION ---
-const uploadDir = path.join(__dirname, '../../uploads');
+// --- 1. MULTER CONFIGURATION (Image Uploads) ---
+const uploadDir = path.join(__dirname, '../../uploads'); 
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, uploadDir);
+        cb(null, 'uploads/'); // Images save to 'backend/uploads'
     },
     filename: function (req, file, cb) {
+        // Unique filename: snack-timestamp.ext
         cb(null, 'snack-' + Date.now() + path.extname(file.originalname));
     }
 });
 
 const upload = multer({ storage: storage });
 
-// --- CATEGORY ROUTES ---
 
+// ==============================
+//      CATEGORY ROUTES
+// ==============================
+
+// GET All Categories
 router.get('/categories', async (req, res) => {
     try {
         const categories = await Category.find();
@@ -34,6 +39,7 @@ router.get('/categories', async (req, res) => {
     }
 });
 
+// ADD New Category
 router.post('/categories', async (req, res) => {
     try {
         const { name } = req.body;
@@ -45,16 +51,20 @@ router.post('/categories', async (req, res) => {
     }
 });
 
+// DELETE Category
 router.delete('/categories/:id', async (req, res) => {
     try {
         await Category.findByIdAndDelete(req.params.id);
-        res.json({ message: "Deleted" });
+        res.json({ message: "Category Deleted" });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// --- SNACK ROUTES ---
+
+// ==============================
+//        SNACK ROUTES
+// ==============================
 
 // GET All Snacks
 router.get('/', async (req, res) => {
@@ -66,91 +76,61 @@ router.get('/', async (req, res) => {
     }
 });
 
-// POST (Add New Snack)
+// POST: Add New Snack (Supports Multiple Images)
 router.post('/', upload.array('images', 5), async (req, res) => {
     try {
-        // 1. Extract 'stock' and 'isAvailable' properly
         const { name, price, description, category, stock, isAvailable } = req.body;
         
-        const imagePaths = req.files.map(file => `/uploads/${file.filename}`);
+        // Handle Images
+        let imagePaths = [];
+        if (req.files && req.files.length > 0) {
+            imagePaths = req.files.map(file => `/uploads/${file.filename}`);
+        }
 
         const snack = new Snack({ 
             name, 
             price, 
             description, 
             category,
-            stock: Number(stock) || 10,         
-            isAvailable: isAvailable || true,
+            stock: Number(stock) || 0,         
+            isAvailable: isAvailable === 'true' || isAvailable === true,
             images: imagePaths 
         });
 
         const newSnack = await snack.save();
         res.status(201).json(newSnack);
     } catch (err) {
-        console.error(err); // Log error for debugging
         res.status(400).json({ message: err.message });
     }
 });
 
-// PUT (Update Snack)
-// router.put('/:id', upload.array('images', 5), async (req, res) => {
-//     try {
-//         // 1. EXTRACT 'stock' HERE (This was likely missing causing your error)
-//         const { name, price, description, category, stock, isAvailable } = req.body;
-        
-//         let updateData = { 
-//             name, 
-//             price, 
-//             description, 
-//             category,
-//             stock: Number(stock),          
-//             isAvailable
-//         };
-
-//         // Only update images if new ones were uploaded
-//         if (req.files && req.files.length > 0) {
-//             const imagePaths = req.files.map(file => `/uploads/${file.filename}`);
-//             updateData.images = imagePaths;
-//         }
-
-//         const updatedSnack = await Snack.findByIdAndUpdate(req.params.id, updateData, { new: true });
-//         res.json(updatedSnack);
-//     } catch (err) {
-//         console.error(err);
-//         res.status(400).json({ message: err.message });
-//     }
-// });
-// PUT (Update Snack)
+// PUT: Update Snack (Supports Multiple Images)
 router.put('/:id', upload.array('images', 5), async (req, res) => {
     try {
         const { name, price, description, category, stock, isAvailable } = req.body;
         
-        // 1. Initialize update object
         let updateData = {};
-
-        // 2. Only add fields if they are provided (prevent NaN errors)
+        
+        // Update text fields if provided
         if (name) updateData.name = name;
         if (price) updateData.price = Number(price);
         if (description) updateData.description = description;
         if (category) updateData.category = category;
-        
-        // Check if stock is provided (it could be 0, so check for undefined)
-        if (stock !== undefined && stock !== '') {
-            updateData.stock = Number(stock);
-        }
+        if (stock !== undefined && stock !== '') updateData.stock = Number(stock);
+        if (isAvailable !== undefined) updateData.isAvailable = isAvailable === 'true';
 
-        // Handle boolean carefully
-        if (isAvailable !== undefined) {
-            updateData.isAvailable = isAvailable === 'true' || isAvailable === true;
-        }
-
-        // 3. Handle Images
+        // Update Images ONLY if new files are uploaded
         if (req.files && req.files.length > 0) {
             const imagePaths = req.files.map(file => `/uploads/${file.filename}`);
-            updateData.images = imagePaths;
+            updateData.images = imagePaths; // Replaces old images array
         }
 
-        const updatedSnack = await Snack.findByIdAndUpdate(req.params.id, updateData, { new: true });
+        const updatedSnack = await Snack.findByIdAndUpdate(
+            req.params.id, 
+            updateData, 
+            { new: true } // Return updated doc
+        );
+        
         res.json(updatedSnack);
     } catch (err) {
         console.error("Update Error:", err);
