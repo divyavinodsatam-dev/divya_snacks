@@ -7,7 +7,7 @@ import {
   deleteSnack, addSnackWithImages, updateSnackWithImages,
   updateOrderStatus, deleteOrder, addCategory, deleteCategory, BASE_URL
 } from '../services/api';
-import EditSnackModal from '../components/Admin/EditSidemodal';
+import EditSnackModal from '../components/Admin/EditSideModal';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
